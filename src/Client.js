@@ -2042,19 +2042,30 @@ class Client extends EventEmitter {
      * @returns {Promise<string>}
      */
     async getProfilePicUrl(contactId) {
-        const profilePic = await this.pupPage.evaluate(async (contactId) => {
+        const profilePicUrl = await this.pupPage.evaluate(async (contactId) => {
             try {
-                const chat = await window.WWebJS.getChat(contactId);
-                return await window
-                    .require('WAWebContactProfilePicThumbBridge')
-                    .requestProfilePicFromServer(chat);
+                const chatWid = window.require('WAWebWidFactory').createWid(contactId);
+                
+                // We force the synchronization so the thumb/picture is loaded 
+                // from the server if it's not already in memory.
+                // Using .catch() to silently ignore if it fails to find the thumbnail
+                await window.require('WAWebCollections').ProfilePicThumb.find(chatWid).catch(() => {});
+                
+                // We extract the URL directly from the ProfilePicThumb collection
+                // bypassing requestProfilePicFromServer completely
+                const thumb = window.require('WAWebCollections').ProfilePicThumb.get(chatWid);
+                if (thumb && thumb.eurl) {
+                    return thumb.eurl;
+                }
+                
+                return undefined;
             } catch (err) {
                 if (err.name === 'ServerStatusCodeError') return undefined;
                 throw err;
             }
         }, contactId);
 
-        return profilePic ? profilePic.eurl : undefined;
+        return profilePicUrl || undefined;
     }
 
     /**
